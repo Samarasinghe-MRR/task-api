@@ -1,14 +1,14 @@
-name: 🧩 Phase 2: Deploy Spring Boot to GCP VM
+name: Deploy Spring Boot to GCP VM
 
 on:
   push:
     branches:
       - main
     paths:
-      - '**.java'
-      - '**.xml'
-      - '**.properties'
-      - '**.yml'
+      - "**.java"
+      - "**.xml"
+      - "**.properties"
+      - "**.yml"
 
 jobs:
   build-and-deploy-vm:
@@ -45,21 +45,15 @@ jobs:
           
       - name: Deploy to GCP VM
         run: |
-          # Add VM to known hosts
           ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
           
-          # Transfer JAR file
           scp ${{ env.JAR_FILE }} ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_IP }}:~/backend/task-api.jar
           
-          # Deploy on remote server
           ssh ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_IP }} << 'EOF'
-            # Create backend directory if it doesn't exist
             mkdir -p ~/backend
             
-            # Stop the service if running
             sudo systemctl stop task-api.service || true
             
-            # Backup old JAR (if exists)
             if [ -f ~/backend/task-api-old.jar ]; then
               rm ~/backend/task-api-old.jar
             fi
@@ -67,20 +61,16 @@ jobs:
               mv ~/backend/task-api.jar ~/backend/task-api-old.jar
             fi
             
-            # Move new JAR to correct location
             mv ~/backend/task-api.jar ~/backend/task-api-new.jar
             mv ~/backend/task-api-new.jar ~/backend/task-api.jar
             
-            # Set executable permissions
             chmod +x ~/backend/task-api.jar
             
-            # Start the service
             sudo systemctl start task-api.service
             sudo systemctl enable task-api.service
             
-            # Check service status
             sleep 5
             sudo systemctl status task-api.service
             
-            echo "✅ Backend deployed successfully!"
+            echo "Backend deployed successfully!"
           EOF

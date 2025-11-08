@@ -1,4 +1,4 @@
-name: 🧪 CI Test - Build Backend
+name: CI Test - Build Backend
 
 on:
   push:
