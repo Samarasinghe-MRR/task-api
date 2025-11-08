@@ -5,16 +5,16 @@ on:
     branches:
       - main
     paths:
-      - '**.java'  # Trigger only when backend code changes
-
-# Configure environment for secret protection
-environment:
-  name: vm-deploy
+      - '**.java'
+      - '**.xml'
+      - '**.properties'
+      - '**.yml'
 
 jobs:
   build-and-deploy-vm:
     name: Build, Package, and Deploy Backend
     runs-on: ubuntu-latest
+    environment: vm-deploy
     permissions:
       contents: read
     
@@ -31,25 +31,56 @@ jobs:
 
       - name: Build and Package Spring Boot
         run: mvn clean package -DskipTests
+        
+      - name: Find JAR file
+        run: |
+          echo "Built JAR files:"
+          ls -la target/*.jar
+          echo "JAR_FILE=$(ls target/*.jar | head -1)" >> $GITHUB_ENV
           
-      - name: Deploy via SSH to GCP VM
-        uses: google-github-actions/ssh@v1
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.8.0
         with:
-          # Authentication and Target VM Details
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          instance_name: ${{ secrets.GCP_VM_INSTANCE_NAME }}
-          zone: ${{ secrets.GCP_VM_ZONE }}
-          user: ${{ secrets.VM_USERNAME }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           
-          # SSH Commands
-          # 1. Transfer the new JAR file to the expected path /home/ubuntu/backend/
-          # 2. Restart the systemd service to pick up the new JAR
-          command: |
-            # Use 'scp' from within the SSH action to copy the artifact
-            echo "Transferring new JAR file..."
-            scp ./target/*.jar ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }}:~/backend/task-api.jar
+      - name: Deploy to GCP VM
+        run: |
+          # Add VM to known hosts
+          ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
+          
+          # Transfer JAR file
+          scp ${{ env.JAR_FILE }} ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_IP }}:~/backend/task-api.jar
+          
+          # Deploy on remote server
+          ssh ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_IP }} << 'EOF'
+            # Create backend directory if it doesn't exist
+            mkdir -p ~/backend
             
-            echo "Restarting task-api service..."
-            sudo systemctl restart task-api.service
+            # Stop the service if running
+            sudo systemctl stop task-api.service || true
+            
+            # Backup old JAR (if exists)
+            if [ -f ~/backend/task-api-old.jar ]; then
+              rm ~/backend/task-api-old.jar
+            fi
+            if [ -f ~/backend/task-api.jar ]; then
+              mv ~/backend/task-api.jar ~/backend/task-api-old.jar
+            fi
+            
+            # Move new JAR to correct location
+            mv ~/backend/task-api.jar ~/backend/task-api-new.jar
+            mv ~/backend/task-api-new.jar ~/backend/task-api.jar
+            
+            # Set executable permissions
+            chmod +x ~/backend/task-api.jar
+            
+            # Start the service
+            sudo systemctl start task-api.service
+            sudo systemctl enable task-api.service
+            
+            # Check service status
+            sleep 5
             sudo systemctl status task-api.service
+            
+            echo "✅ Backend deployed successfully!"
+          EOF
