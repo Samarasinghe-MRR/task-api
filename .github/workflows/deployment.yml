@@ -1,0 +1,55 @@
+name: 🧩 Phase 2: Deploy Spring Boot to GCP VM
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.java'  # Trigger only when backend code changes
+
+# Configure environment for secret protection
+environment:
+  name: vm-deploy
+
+jobs:
+  build-and-deploy-vm:
+    name: Build, Package, and Deploy Backend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build and Package Spring Boot
+        run: mvn clean package -DskipTests
+          
+      - name: Deploy via SSH to GCP VM
+        uses: google-github-actions/ssh@v1
+        with:
+          # Authentication and Target VM Details
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          instance_name: ${{ secrets.GCP_VM_INSTANCE_NAME }}
+          zone: ${{ secrets.GCP_VM_ZONE }}
+          user: ${{ secrets.VM_USERNAME }}
+          
+          # SSH Commands
+          # 1. Transfer the new JAR file to the expected path /home/ubuntu/backend/
+          # 2. Restart the systemd service to pick up the new JAR
+          command: |
+            # Use 'scp' from within the SSH action to copy the artifact
+            echo "Transferring new JAR file..."
+            scp ./target/*.jar ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }}:~/backend/task-api.jar
+            
+            echo "Restarting task-api service..."
+            sudo systemctl restart task-api.service
+            sudo systemctl status task-api.service
