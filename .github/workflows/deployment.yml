@@ -35,18 +35,12 @@ jobs:
       - name: Deploy via SSH to GCP VM
         uses: google-github-actions/ssh@v1
         with:
-          # Authentication and Target VM Details
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           service_account_key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
           instance_name: ${{ secrets.GCP_VM_INSTANCE_NAME }}
           zone: ${{ secrets.GCP_VM_ZONE }}
           user: ${{ secrets.VM_USERNAME }}
-
-          # SSH Commands
-          # 1. Transfer the new JAR file to the expected path /home/ubuntu/backend/
-          # 2. Restart the systemd service to pick up the new JAR
           command: |
-            # Use 'scp' from within the SSH action to copy the artifact
             echo "Transferring new JAR file..."
             scp ./target/*.jar ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }}:~/backend/task-api.jar
 
