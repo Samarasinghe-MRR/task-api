@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class TaskApiApplication {
 
 	public static void main(String[] args) {
+		// Testing CI/CD pipeline - deployment workflow trigger
 		SpringApplication.run(TaskApiApplication.class, args);
 	}
 

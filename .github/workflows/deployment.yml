@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "**.java"
+      - "**.xml"
+      - "**.properties"
+      - "**.yml"
 
 jobs:
   build-and-deploy-vm:
