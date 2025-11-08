@@ -49,15 +49,7 @@ jobs:
             --zone ${{ secrets.GCP_VM_ZONE }}
 
       - name: Restart task-api service via SSH
-        uses: google-github-actions/ssh@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          instance_name: ${{ secrets.GCP_VM_INSTANCE_NAME }}
-          zone: ${{ secrets.GCP_VM_ZONE }}
-          user: ${{ secrets.VM_USERNAME }}
-          # Only run remote commands here
-          command: |
-            echo "Restarting task-api service..."
-            sudo systemctl restart task-api.service
-            sudo systemctl status task-api.service
+        run: |
+          gcloud compute ssh ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }} \
+            --zone ${{ secrets.GCP_VM_ZONE }} \
+            --command="echo 'Restarting task-api service...'; sudo systemctl restart task-api.service; sudo systemctl status task-api.service"
