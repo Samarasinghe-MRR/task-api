@@ -7,14 +7,11 @@ on:
     paths:
       - '**.java'  # Trigger only when backend code changes
 
-# Configure environment for secret protection
-environment:
-  name: vm-deploy
-
 jobs:
   build-and-deploy-vm:
     name: Build, Package, and Deploy Backend
     runs-on: ubuntu-latest
+    environment: vm-deploy  # Environment should be inside the job
     permissions:
       contents: read
 
