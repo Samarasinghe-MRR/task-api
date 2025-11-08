@@ -17,60 +17,39 @@ jobs:
     environment: vm-deploy
     permissions:
       contents: read
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'maven'
+          java-version: "17"
+          distribution: "temurin"
+          cache: "maven"
 
       - name: Build and Package Spring Boot
         run: mvn clean package -DskipTests
-        
-      - name: Find JAR file
-        run: |
-          echo "Built JAR files:"
-          ls -la target/*.jar
-          echo "JAR_FILE=$(ls target/*.jar | head -1)" >> $GITHUB_ENV
-          
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.8.0
+
+      - name: Deploy via SSH to GCP VM
+        uses: google-github-actions/ssh@v1
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          
-      - name: Deploy to GCP VM
-        run: |
-          ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
-          
-          scp ${{ env.JAR_FILE }} ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_IP }}:~/backend/task-api.jar
-          
-          ssh ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_IP }} << 'EOF'
-            mkdir -p ~/backend
-            
-            sudo systemctl stop task-api.service || true
-            
-            if [ -f ~/backend/task-api-old.jar ]; then
-              rm ~/backend/task-api-old.jar
-            fi
-            if [ -f ~/backend/task-api.jar ]; then
-              mv ~/backend/task-api.jar ~/backend/task-api-old.jar
-            fi
-            
-            mv ~/backend/task-api.jar ~/backend/task-api-new.jar
-            mv ~/backend/task-api-new.jar ~/backend/task-api.jar
-            
-            chmod +x ~/backend/task-api.jar
-            
-            sudo systemctl start task-api.service
-            sudo systemctl enable task-api.service
-            
-            sleep 5
+          # Authentication and Target VM Details
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          instance_name: ${{ secrets.GCP_VM_INSTANCE_NAME }}
+          zone: ${{ secrets.GCP_VM_ZONE }}
+          user: ${{ secrets.VM_USERNAME }}
+
+          # SSH Commands
+          # 1. Transfer the new JAR file to the expected path /home/ubuntu/backend/
+          # 2. Restart the systemd service to pick up the new JAR
+          command: |
+            # Use 'scp' from within the SSH action to copy the artifact
+            echo "Transferring new JAR file..."
+            scp ./target/*.jar ${{ secrets.VM_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }}:~/backend/task-api.jar
+
+            echo "Restarting task-api service..."
+            sudo systemctl restart task-api.service
             sudo systemctl status task-api.service
-            
-            echo "Backend deployed successfully!"
-          EOF
