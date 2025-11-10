@@ -9,6 +9,7 @@ on:
       - "**.xml"
       - "**.properties"
       - "**.yml"
+      - "!vm-deployment/**"  # Exclude VM HTTPS setup files
 
 jobs:
   build-and-deploy-vm:

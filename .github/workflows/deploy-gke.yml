@@ -11,6 +11,7 @@ on:
       - "**.yml"
       - "Dockerfile"
       - "k8s/**"
+      - "!vm-deployment/**"  # Exclude VM deployment files
 
 env:
   GCP_PROJECT_ID: dev-ops-475910
@@ -114,7 +115,7 @@ jobs:
           echo "📊 Current Application Status:"
           kubectl get pods -n task-api -l app=backend --no-headers 2>/dev/null | wc -l > /tmp/backend_pods || echo "0" > /tmp/backend_pods
           BACKEND_PODS=$(cat /tmp/backend_pods)
-          
+
           if [ "$BACKEND_PODS" -gt 0 ]; then
             echo "✅ Backend pods running: $BACKEND_PODS"
             echo "🔄 Infrastructure team can update deployment with new image"

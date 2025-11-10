@@ -1,0 +1,54 @@
+# Google Cloud Load Balancer for VM
+# This creates a separate load balancer with managed certificate for VM
+
+# 1. Create a separate managed certificate
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate  
+metadata:
+  name: vm-app-certificate
+  namespace: default  # Different namespace
+spec:
+  domains:
+    - vm.rajinitasksapi-devop.me  # Different subdomain
+
+---
+# 2. Create backend service pointing to your VM
+apiVersion: v1
+kind: Service
+metadata:
+  name: vm-backend-service
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: 34.100.195.80  # Your VM IP
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+# 3. Create separate ingress for VM
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vm-app-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    networking.gke.io/managed-certificates: "vm-app-certificate"
+    kubernetes.io/ingress.global-static-ip-name: "vm-app-ip"  # Need separate IP
+spec:
+  tls:
+    - secretName: vm-app-ssl-cert
+      hosts:
+        - vm.rajinitasksapi-devop.me
+  rules:
+    - host: vm.rajinitasksapi-devop.me
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: vm-backend-service
+                port:
+                  number: 80
