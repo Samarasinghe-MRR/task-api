@@ -95,7 +95,9 @@ jobs:
           # Create temporary deployment file with updated image
           sed "s|asia-south1-docker.pkg.dev/dev-ops-475910/task-repo-rajinie/task-api:latest|${IMAGE_PATH}:${IMAGE_TAG}|g" k8s/backend-deployment.yaml > k8s/backend-deployment-temp.yaml
 
-          # Apply all necessary Kubernetes manifests
+          # Apply all necessary Kubernetes manifests (RBAC first for permissions)
+          kubectl apply -f k8s/rbac-role.yaml
+          kubectl apply -f k8s/rbac-binding.yaml
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/postgres-secret.yaml
           kubectl apply -f k8s/postgres-deployment.yaml
