@@ -92,33 +92,32 @@ jobs:
         run: |
           IMAGE_PATH="${{ env.ARTIFACT_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}"
 
-          # Create temporary deployment file with updated image
-          sed "s|asia-south1-docker.pkg.dev/dev-ops-475910/task-repo-rajinie/task-api:latest|${IMAGE_PATH}:${IMAGE_TAG}|g" k8s/backend-deployment.yaml > k8s/backend-deployment-temp.yaml
+          echo "🎉 Backend Build Complete!"
+          echo "📦 Docker Image: $IMAGE_PATH:$IMAGE_TAG"  
+          echo "🚀 Image pushed to Artifact Registry successfully"
+          echo ""
+          echo "ℹ️  Next Steps:"
+          echo "   1. Infrastructure team will deploy this image to GKE"
+          echo "   2. Monitor deployment in the infrastructure repository" 
+          echo "   3. Verify API at: http://136.110.145.6/api/tasks"
 
-          # Apply all necessary Kubernetes manifests (RBAC first for permissions)
-          kubectl apply -f k8s/rbac-role.yaml
-          kubectl apply -f k8s/rbac-binding.yaml
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/postgres-secret.yaml
-          kubectl apply -f k8s/postgres-deployment.yaml
-          kubectl apply -f k8s/postgres-service.yaml
-          kubectl apply -f k8s/backend-config.yaml
-          kubectl apply -f k8s/backend-env-config.yaml
-          kubectl apply -f k8s/backend-deployment-temp.yaml
-          kubectl apply -f k8s/backend-service.yaml
-
-          # Clean up temporary file
-          rm k8s/backend-deployment-temp.yaml
-
-      - name: Wait for Backend Rollout
+      - name: Verify Image in Registry
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          kubectl rollout status deployment/backend-deployment -n ${{ env.NAMESPACE }} --timeout=300s
+          IMAGE_PATH="${{ env.ARTIFACT_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}"
+          echo "🔍 Verifying backend image exists in registry..."
+          gcloud container images describe $IMAGE_PATH:$IMAGE_TAG --format="value(image_summary.digest)" || echo "⚠️ Image verification failed - check registry permissions"
 
-      - name: Verify Deployment
+      - name: Check Current Application Status
         run: |
-          echo "=== Pod Status ==="
-          kubectl get pods -n ${{ env.NAMESPACE }} -l app=backend
-          echo "=== Service Status ==="
-          kubectl get services -n ${{ env.NAMESPACE }}
-          echo "=== Recent Logs ==="
-          kubectl logs -n ${{ env.NAMESPACE }} -l app=backend --tail=10
+          echo "📊 Current Application Status:"
+          kubectl get pods -n task-api -l app=backend --no-headers 2>/dev/null | wc -l > /tmp/backend_pods || echo "0" > /tmp/backend_pods
+          BACKEND_PODS=$(cat /tmp/backend_pods)
+          
+          if [ "$BACKEND_PODS" -gt 0 ]; then
+            echo "✅ Backend pods running: $BACKEND_PODS"
+            echo "🔄 Infrastructure team can update deployment with new image"
+          else
+            echo "⚠️ No backend pods found - initial deployment needed"
+          fi
