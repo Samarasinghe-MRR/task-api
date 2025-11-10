@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  namespace: task-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # --- INIT CONTAINERS BLOCK - Wait for database to be ready ---
+      initContainers:
+        - name: init-db-wait
+          image: busybox:1.36
+          command:
+            [
+              "sh",
+              "-c",
+              "until nc -z postgres 5432; do echo waiting for db; sleep 2; done;",
+            ]
+      # --- END INIT CONTAINERS BLOCK ---
+
+      containers:
+        - name: backend
+          image: asia-south1-docker.pkg.dev/dev-ops-475910/task-repo-rajinie/task-api:latest
+          ports:
+            - containerPort: 8080
+          # Environment variables using Kubernetes Secret for security
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/taskdb
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: create-drop
+            - name: SPRING_JPA_SHOW_SQL
+              value: "true"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+          # Environment variables from ConfigMap for CORS
+          envFrom:
+            - configMapRef:
+                name: backend-env-config
+          # Readiness/Liveness probes using actuator health endpoint
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 15
+            timeoutSeconds: 5

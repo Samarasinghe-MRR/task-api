@@ -1,0 +1,122 @@
+name: Phase 5 - CI/CD Backend to GKE
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**.java"
+      - "**.xml"
+      - "**.properties"
+      - "**.yml"
+      - "Dockerfile"
+      - "k8s/**"
+
+env:
+  GCP_PROJECT_ID: dev-ops-475910
+  GKE_CLUSTER: task-cluster
+  GKE_ZONE: asia-south1-b
+  ARTIFACT_REGISTRY_REGION: asia-south1
+  REPOSITORY: task-repo-rajinie
+  IMAGE_NAME: task-api
+  NAMESPACE: task-api
+
+jobs:
+  build-push-deploy:
+    name: Build, Push, and Deploy Backend to GKE
+    runs-on: ubuntu-latest
+    environment: gke-deploy
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # --- 1. AUTHENTICATION & SDK SETUP ---
+      - name: "Authenticate to GCP and Setup SDK"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+
+      - name: "Configure Docker to use gcloud as a credential helper"
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY_REGION }}-docker.pkg.dev
+
+      # --- 2. BUILD APPLICATION ---
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      # --- 3. BUILD & PUSH DOCKER IMAGE ---
+      - name: Build and Push Docker Image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_PATH="${{ env.ARTIFACT_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}"
+
+          # Build image with both SHA tag and latest tag
+          docker build -t $IMAGE_PATH:$IMAGE_TAG -t $IMAGE_PATH:latest .
+
+          # Push both tags
+          docker push $IMAGE_PATH:$IMAGE_TAG
+          docker push $IMAGE_PATH:latest
+
+      # --- 4. DEPLOY TO GKE ---
+      - name: Set up GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Update Kubernetes manifests and Deploy
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_PATH="${{ env.ARTIFACT_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}"
+
+          # Create temporary deployment file with updated image
+          sed "s|asia-south1-docker.pkg.dev/dev-ops-475910/task-repo-rajinie/task-api:latest|${IMAGE_PATH}:${IMAGE_TAG}|g" k8s/backend-deployment.yaml > k8s/backend-deployment-temp.yaml
+
+          # Apply all necessary Kubernetes manifests
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/postgres-secret.yaml
+          kubectl apply -f k8s/postgres-deployment.yaml
+          kubectl apply -f k8s/postgres-service.yaml
+          kubectl apply -f k8s/backend-config.yaml
+          kubectl apply -f k8s/backend-env-config.yaml
+          kubectl apply -f k8s/backend-deployment-temp.yaml
+          kubectl apply -f k8s/backend-service.yaml
+
+          # Clean up temporary file
+          rm k8s/backend-deployment-temp.yaml
+
+      - name: Wait for Backend Rollout
+        run: |
+          kubectl rollout status deployment/backend-deployment -n ${{ env.NAMESPACE }} --timeout=300s
+
+      - name: Verify Deployment
+        run: |
+          echo "=== Pod Status ==="
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=backend
+          echo "=== Service Status ==="
+          kubectl get services -n ${{ env.NAMESPACE }}
+          echo "=== Recent Logs ==="
+          kubectl logs -n ${{ env.NAMESPACE }} -l app=backend --tail=10

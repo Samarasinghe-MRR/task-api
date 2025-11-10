@@ -1,0 +1,14 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: backend-health-config
+  namespace: task-api
+spec:
+  healthCheck:
+    checkIntervalSec: 60
+    timeoutSec: 30
+    healthyThreshold: 1
+    unhealthyThreshold: 5
+    type: HTTP
+    port: 8080
+    requestPath: /actuator/health

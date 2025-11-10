@@ -9,12 +9,18 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/tasks") // Base URL for all endpoints in this class
 public class TaskController {
-    
-    // Version 2.1 - Testing CI/CD Pipeline Deployment
+
+    // Version 2.2 - Testing CI/CD Pipeline with GCP Authentication
     private final TaskService taskService;
 
     public TaskController(TaskService taskService) {
         this.taskService = taskService;
+    }
+
+    // Health check endpoint for Kubernetes probes
+    @GetMapping("/health")
+    public ResponseEntity<String> health() {
+        return ResponseEntity.ok("OK");
     }
 
     // GET http://localhost:8081/api/tasks (Get All Tasks)
